@@ -27,16 +27,19 @@ The skill runs an end-to-end ASO workflow:
 
 1. Keyword demand estimation
 2. Competitor pattern analysis (iOS + Android paths)
-3. Metadata generation
-4. CPP/PSL manifest preparation
-5. Optional fastlane publishing (scope-gated)
-6. Approval-gated execution at every step (including analysis)
+3. App-vs-competitor gap analysis
+4. Metadata generation
+5. Localization semantic/cultural QA per locale
+6. Variant acceptance gate
+7. CPP/PSL manifest preparation
+8. Optional metadata apply + fastlane publishing + git push
+9. Approval-gated execution at every step (including analysis)
 
 ## What Makes It Different
 
 - **Policy-first by design**: Apple/Google guardrails are built into the workflow.
 - **Scope-aware execution**: iOS-only, Android-only, dual mode. No wasted steps.
-- **Real competitor intelligence**: matrix, motif prevalence, similarity, shared vocabulary.
+- **Real competitor intelligence**: matrix, motif prevalence, similarity, shared vocabulary, semantic theme map, keyword emphasis heat, recurring phrase patterns.
 - **Operational outputs**: not just advice, but files you can run and publish.
 - **Human-in-the-loop control**: every major step can require explicit approval.
 
@@ -78,6 +81,33 @@ For non-interactive runs:
 
 ```bash
 python scripts/run_aso_pipeline.py ... --auto-approve
+```
+
+## Full Execution Flow (Compare -> Generate -> Apply -> Push)
+
+```bash
+python scripts/run_aso_pipeline.py \
+  --keyword-input assets/keyword-volume-keywords-template.csv \
+  --apple-proxy assets/keyword-volume-apple-proxy-template.csv \
+  --google-planner assets/keyword-volume-google-planner-template.csv \
+  --apptweak assets/keyword-volume-apptweak-template.csv \
+  --competitor-terms assets/keyword-volume-competitor-template.csv \
+  --itunes-signals assets/keyword-volume-itunes-signals-template.csv \
+  --ios-seeds "intermittent fasting,fasting timer,omad" \
+  --play-raw-export assets/play-raw-export-template.csv \
+  --play-mapping-json assets/play-export-mapping-template.json \
+  --current-metadata-root fastlane/metadata \
+  --compare-locales "en-US,tr-TR" \
+  --metadata-input assets/metadata-generation-input-template.json \
+  --localization-source-locale en-US \
+  --apply-generated-metadata \
+  --target-metadata-root fastlane/metadata \
+  --push-ios --app-identifier com.example.app \
+  --push-android --package-name com.example.app \
+  --execute-push \
+  --git-workdir . --git-commit --git-push \
+  --output-dir run-artifacts/full-run \
+  --app-scope dual
 ```
 
 ## Common Use Cases
@@ -133,10 +163,12 @@ python scripts/run_aso_pipeline.py ... \
 
 - `scripts/run_aso_pipeline.py`: Approval-gated orchestrator
 - `scripts/aso_keyword_volume_estimator.py`: Multi-source demand scoring
-- `scripts/aso_competitor_matrix_builder.py`: iOS competitor matrix (iTunes data)
+- `scripts/aso_competitor_matrix_builder.py`: iOS competitor matrix + semantic/theme/pattern analysis (iTunes data)
 - `scripts/aso_play_export_normalizer.py`: Normalize raw Play exports
-- `scripts/aso_play_competitor_import_analyzer.py`: Android competitor matrix from CSV
+- `scripts/aso_play_competitor_import_analyzer.py`: Android competitor matrix + semantic/theme/pattern analysis from CSV
 - `scripts/aso_metadata_generator.py`: Generate metadata + fastlane files
+- `scripts/aso_competitive_gap_analyzer.py`: Compare current app metadata vs competitor patterns and highlight gaps
+- `scripts/aso_translation_semantic_audit.py`: Locale-level semantic and cultural translation QA
 - `scripts/aso_cpp_psl_builder.py`: Build CPP/PSL manifests
 - `scripts/aso_fastlane_bridge.py`: Scope-aware fastlane command bridge
 
@@ -144,7 +176,7 @@ python scripts/run_aso_pipeline.py ... \
 
 Each run writes outputs under your chosen `--output-dir`, typically:
 
-- `analysis/` (keyword + competitor analysis outputs)
+- `analysis/` (keyword + competitor analysis outputs, including `_semantic_themes.csv`, `_keyword_emphasis.csv`, `_phrase_patterns.csv`)
 - `metadata_bundle.json`
 - `cpp_manifest.json`
 - `psl_manifest.json`

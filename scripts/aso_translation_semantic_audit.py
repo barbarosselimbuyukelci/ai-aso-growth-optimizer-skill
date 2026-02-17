@@ -26,6 +26,35 @@ GOOGLE_LIMITS = {
 PLACEHOLDER_RE = re.compile(r"(\{[a-zA-Z0-9_]+\}|\{\{[a-zA-Z0-9_]+\}\}|%[sd])")
 NUMBER_RE = re.compile(r"\d+")
 ALPHA_RE = re.compile(r"[A-Za-z]{4,}")
+WORD_RE = re.compile(r"[A-Za-z]{3,}")
+
+COMMON_ENGLISH_WORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "your",
+    "track",
+    "easy",
+    "fast",
+    "daily",
+    "results",
+    "weight",
+    "health",
+    "timer",
+    "plan",
+    "goals",
+    "habit",
+    "meal",
+    "smart",
+    "quick",
+    "simple",
+    "best",
+    "new",
+    "improve",
+    "progress",
+    "analytics",
+}
 
 
 def load_payload(path: str) -> Dict[str, Any]:
@@ -50,6 +79,10 @@ def placeholders(text: str) -> Set[str]:
 
 def numbers(text: str) -> List[str]:
     return NUMBER_RE.findall(text)
+
+
+def words(text: str) -> List[str]:
+    return [w.lower() for w in WORD_RE.findall(text)]
 
 
 def main() -> int:
@@ -123,6 +156,27 @@ def main() -> int:
             # If source has substantial alphabetic text and target equals source, likely untranslated.
             if target == source_text and ALPHA_RE.search(source_text):
                 loc_report["warnings"].append(f"{entry_id}: translation identical to source text")
+
+            # Literal translation risk: excessively high lexical overlap with source in non-English locales.
+            if not locale.lower().startswith("en"):
+                source_words = set(words(source_text))
+                target_words = set(words(target))
+                if source_words:
+                    overlap = len(source_words.intersection(target_words)) / max(1, len(source_words))
+                    if overlap >= 0.85:
+                        loc_report["warnings"].append(
+                            f"{entry_id}: high source-target lexical overlap ({overlap:.2f}), possible literal translation"
+                        )
+
+                # Cultural adaptation risk proxy: target copy remains heavily English.
+                target_word_list = words(target)
+                if target_word_list:
+                    english_hits = sum(1 for w in target_word_list if w in COMMON_ENGLISH_WORDS)
+                    english_ratio = english_hits / len(target_word_list)
+                    if english_ratio >= 0.40:
+                        loc_report["warnings"].append(
+                            f"{entry_id}: high English word ratio ({english_ratio:.2f}) for locale {locale}"
+                        )
 
             for term in protected_terms:
                 if term and term in source_text and term not in target:

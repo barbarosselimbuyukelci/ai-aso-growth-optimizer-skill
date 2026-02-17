@@ -210,13 +210,14 @@ For each run, produce:
 
 1. Compliance risk report
 2. Competitor matrix and shared-pattern summary
-3. Keyword demand estimate table with confidence bands
-4. Metadata recommendation set (Apple + Google)
-5. Experiment backlog with priority scores
-6. Abuse-risk prevention checklist
-7. 30/60 day ASO execution plan with success metrics
-8. Localization semantic QA report by locale
-9. Automation handoff notes for fastlane/CI
+3. App-vs-competitor gap report (motif/theme/keyword gaps)
+4. Keyword demand estimate table with confidence bands
+5. Metadata recommendation set (Apple + Google)
+6. Experiment backlog with priority scores
+7. Abuse-risk prevention checklist
+8. 30/60 day ASO execution plan with success metrics
+9. Localization semantic QA report by locale
+10. Automation handoff notes for fastlane/CI
 
 ## Scripts
 
@@ -260,7 +261,7 @@ python scripts/aso_itunes_intent_keyword_discovery.py --seeds "note taking,voice
 
 Purpose:
 
-- Build competitor matrix, common pattern prevalence, term coverage, and similarity map.
+- Build competitor matrix, common pattern prevalence, term coverage, similarity map, semantic-theme prevalence, keyword emphasis map, and recurring phrase patterns.
 
 Usage:
 
@@ -272,7 +273,7 @@ python scripts/aso_competitor_matrix_builder.py --seeds "note taking,meeting not
 
 Purpose:
 
-- Build Play/Android competitor matrix from imported CSV data when app scope includes Android.
+- Build Play/Android competitor matrix from imported CSV data, including semantic-theme prevalence, keyword emphasis map, and recurring phrase patterns when app scope includes Android.
 
 Usage:
 
@@ -317,6 +318,18 @@ Usage:
 python scripts/aso_metadata_generator.py --input assets/metadata-generation-input-template.json --output-dir run-artifacts/metadata-run
 ```
 
+### `scripts/aso_competitive_gap_analyzer.py`
+
+Purpose:
+
+- Compare current app metadata with competitor outputs and highlight missing motifs, semantic themes, and high-emphasis keywords.
+
+Usage:
+
+```bash
+python scripts/aso_competitive_gap_analyzer.py --analysis-dir run-artifacts/sample-run/analysis --app-metadata-root fastlane/metadata --locales "en-US,tr-TR" --app-scope dual --output-json run-artifacts/sample-run/analysis/app_competitor_gap_report.json --output-md run-artifacts/sample-run/analysis/app_competitor_gap_report.md
+```
+
 ### `scripts/aso_cpp_psl_builder.py`
 
 Purpose:
@@ -345,7 +358,7 @@ python scripts/aso_translator_bridge.py --input assets/translation-batch-templat
 
 Purpose:
 
-- Validate translation completeness, placeholders, numeric tokens, protected terms, and length constraints.
+- Validate translation completeness, placeholders, numeric tokens, protected terms, length constraints, and cultural adaptation risk signals.
 
 Usage:
 
@@ -370,12 +383,12 @@ python scripts/aso_fastlane_bridge.py --platform android --lane supply --app-sco
 
 Purpose:
 
-- Execute analysis + generation + CPP/PSL + optional push with per-step user approval and notes.
+- Execute analysis + app-vs-competitor comparison + metadata generation + localization QA + variant acceptance + CPP/PSL + apply + optional fastlane/git push with per-step approval.
 
 Usage:
 
 ```bash
-python scripts/run_aso_pipeline.py --keyword-input assets/keyword-volume-keywords-template.csv --apple-proxy assets/keyword-volume-apple-proxy-template.csv --google-planner assets/keyword-volume-google-planner-template.csv --apptweak assets/keyword-volume-apptweak-template.csv --competitor-terms assets/keyword-volume-competitor-template.csv --itunes-signals assets/keyword-volume-itunes-signals-template.csv --ios-seeds "note taking,meeting notes" --play-raw-export assets/play-raw-export-template.csv --play-mapping-json assets/play-export-mapping-template.json --metadata-input assets/metadata-generation-input-template.json --output-dir run-artifacts/sample-run
+python scripts/run_aso_pipeline.py --keyword-input assets/keyword-volume-keywords-template.csv --apple-proxy assets/keyword-volume-apple-proxy-template.csv --google-planner assets/keyword-volume-google-planner-template.csv --apptweak assets/keyword-volume-apptweak-template.csv --competitor-terms assets/keyword-volume-competitor-template.csv --itunes-signals assets/keyword-volume-itunes-signals-template.csv --ios-seeds "note taking,meeting notes" --play-raw-export assets/play-raw-export-template.csv --play-mapping-json assets/play-export-mapping-template.json --current-metadata-root fastlane/metadata --compare-locales "en-US,tr-TR" --metadata-input assets/metadata-generation-input-template.json --apply-generated-metadata --target-metadata-root fastlane/metadata --git-workdir . --git-commit --output-dir run-artifacts/sample-run
 ```
 
 ## Notes On Tooling

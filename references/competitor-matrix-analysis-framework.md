@@ -13,6 +13,8 @@ Identify shared ASO patterns across competitors and convert them into actionable
 
 2. Messaging Layer
 - Dominant value proposition motifs (speed, AI, trust, collaboration, productivity)
+- Semantic theme prevalence (which narrative clusters dominate the category)
+- Field-level emphasis (title vs short description vs long description)
 - Frequent vocabulary and claim structures
 - Common CTA style
 
@@ -63,6 +65,7 @@ Scope note:
 
 - Competitor matrix (auto + manual)
 - Shared pattern summary
+- Semantic theme + keyword emphasis summary
 - Strategic direction memo:
   - Keep
   - Improve

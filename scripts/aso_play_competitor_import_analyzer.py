@@ -11,6 +11,9 @@ Outputs:
 - <prefix>_common_patterns.csv
 - <prefix>_term_coverage.csv
 - <prefix>_similarity.csv
+- <prefix>_semantic_themes.csv
+- <prefix>_keyword_emphasis.csv
+- <prefix>_phrase_patterns.csv
 - <prefix>_report.md
 """
 
@@ -22,7 +25,7 @@ import math
 import re
 import statistics
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
@@ -113,6 +116,25 @@ MOTIFS = {
     "capture_ingest": {"record", "capture", "scan", "import", "transcribe", "voice"},
     "monetization_cues": {"premium", "pro", "trial", "subscription", "upgrade"},
     "social_proof_cues": {"millions", "users", "top", "award", "trusted", "leading"},
+}
+
+SEMANTIC_THEMES = {
+    "automation_ai": {"ai", "assistant", "copilot", "smart", "intelligent", "auto", "automate"},
+    "speed_simplicity": {"fast", "quick", "instant", "simple", "easy", "effortless", "seconds"},
+    "outcome_performance": {"results", "progress", "improve", "optimize", "efficient", "success", "achieve"},
+    "planning_organization": {"plan", "organize", "schedule", "tasks", "workflow", "manage", "calendar"},
+    "tracking_visibility": {"track", "monitor", "insights", "analytics", "history", "report", "dashboard"},
+    "trust_safety": {"secure", "privacy", "private", "encrypted", "safe", "compliant", "trusted"},
+    "team_collaboration": {"team", "share", "collaborate", "workspace", "together", "sync", "group"},
+    "engagement_habit": {"daily", "routine", "streak", "habit", "reminder", "consistent", "goals"},
+    "monetization_upsell": {"premium", "pro", "subscription", "trial", "upgrade", "unlimited", "plus"},
+    "social_proof": {"millions", "users", "reviews", "rating", "top", "award", "leading"},
+}
+
+FIELD_WEIGHTS = {
+    "title": 3.0,
+    "short_description": 2.0,
+    "description": 1.0,
 }
 
 
@@ -224,12 +246,18 @@ def write_skipped_outputs(output_dir: Path, prefix: str, app_scope: str, reason:
     patterns_path = output_dir / f"{prefix}_common_patterns.csv"
     terms_path = output_dir / f"{prefix}_term_coverage.csv"
     similarity_path = output_dir / f"{prefix}_similarity.csv"
+    semantic_path = output_dir / f"{prefix}_semantic_themes.csv"
+    emphasis_path = output_dir / f"{prefix}_keyword_emphasis.csv"
+    phrases_path = output_dir / f"{prefix}_phrase_patterns.csv"
     report_path = output_dir / f"{prefix}_report.md"
 
     write_csv(matrix_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
     write_csv(patterns_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
     write_csv(terms_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
     write_csv(similarity_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
+    write_csv(semantic_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
+    write_csv(emphasis_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
+    write_csv(phrases_path, [["status", "app_scope", "reason"], ["skipped", app_scope, reason]])
 
     report = [
         "# ASO Play Competitor Report (Skipped)",
@@ -246,6 +274,9 @@ def write_skipped_outputs(output_dir: Path, prefix: str, app_scope: str, reason:
     print(f"Wrote: {patterns_path}")
     print(f"Wrote: {terms_path}")
     print(f"Wrote: {similarity_path}")
+    print(f"Wrote: {semantic_path}")
+    print(f"Wrote: {emphasis_path}")
+    print(f"Wrote: {phrases_path}")
     print(f"Wrote: {report_path}")
 
 
@@ -271,6 +302,152 @@ def strategic_implications(motif_stats: List[Tuple[str, float, int, int]]) -> Li
     if not lines:
         lines.append("No highly dominant motif. Split positioning by intent cluster and locale.")
     return lines
+
+
+def top_terms_from_tokens(tokens: List[str], top_n: int = 5) -> List[str]:
+    if not tokens:
+        return []
+    return [term for term, _ in Counter(tokens).most_common(top_n)]
+
+
+def dominant_theme(theme_hits: Dict[str, int]) -> str:
+    if not theme_hits:
+        return "none"
+    theme, score = max(theme_hits.items(), key=lambda x: (x[1], x[0]))
+    return theme if score > 0 else "none"
+
+
+def build_theme_hits(token_set: Set[str]) -> Dict[str, int]:
+    return {theme: len(token_set.intersection(terms)) for theme, terms in SEMANTIC_THEMES.items()}
+
+
+def build_theme_summary(
+    theme_app_counts: Dict[str, int],
+    theme_terms: Dict[str, Counter[str]],
+    theme_examples: Dict[str, List[str]],
+    total_apps: int,
+) -> List[List[object]]:
+    rows: List[List[object]] = [["theme", "app_count", "prevalence", "top_terms", "example_apps"]]
+    for theme in sorted(SEMANTIC_THEMES.keys(), key=lambda t: theme_app_counts.get(t, 0), reverse=True):
+        count = theme_app_counts.get(theme, 0)
+        prevalence = (count / total_apps) if total_apps else 0.0
+        top_terms = ", ".join([term for term, _ in theme_terms.get(theme, Counter()).most_common(6)])
+        examples = " | ".join(theme_examples.get(theme, [])[:5])
+        rows.append([theme, count, f"{prevalence:.3f}", top_terms, examples])
+    return rows
+
+
+def build_keyword_emphasis_rows(
+    keyword_stats: Dict[str, Dict[str, object]],
+    total_apps: int,
+    min_doc_freq: int,
+    top_n: int,
+) -> List[List[object]]:
+    ranked: List[Tuple[str, float, int, int, int, int]] = []
+    for keyword, stats in keyword_stats.items():
+        app_coverage = int(stats.get("apps", 0))
+        if app_coverage < min_doc_freq:
+            continue
+        title_count = int(stats.get("title", 0))
+        short_count = int(stats.get("short_description", 0))
+        desc_count = int(stats.get("description", 0))
+        weighted = (
+            (title_count * FIELD_WEIGHTS["title"])
+            + (short_count * FIELD_WEIGHTS["short_description"])
+            + (desc_count * FIELD_WEIGHTS["description"])
+        )
+        ranked.append((keyword, weighted, app_coverage, title_count, short_count, desc_count))
+
+    ranked.sort(key=lambda x: (x[1], x[2], x[0]), reverse=True)
+    rows: List[List[object]] = [[
+        "keyword",
+        "weighted_emphasis",
+        "app_coverage",
+        "coverage_ratio",
+        "title_mentions",
+        "short_description_mentions",
+        "description_mentions",
+        "dominant_field",
+    ]]
+    for keyword, weighted, app_coverage, title_count, short_count, desc_count in ranked[:top_n]:
+        dominant_field = max(
+            [("title", title_count), ("short_description", short_count), ("description", desc_count)],
+            key=lambda x: (x[1], x[0]),
+        )[0]
+        rows.append(
+            [
+                keyword,
+                f"{weighted:.2f}",
+                app_coverage,
+                f"{(app_coverage / total_apps) if total_apps else 0.0:.3f}",
+                title_count,
+                short_count,
+                desc_count,
+                dominant_field,
+            ]
+        )
+    return rows
+
+
+def make_ngrams(tokens: List[str], n: int) -> List[str]:
+    if len(tokens) < n:
+        return []
+    return [" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
+
+
+def build_phrase_pattern_rows(
+    phrase_stats: Dict[str, Dict[str, object]],
+    total_apps: int,
+    min_doc_freq: int,
+    top_n: int,
+) -> List[List[object]]:
+    ranked: List[Tuple[str, float, int, int, int, int, int]] = []
+    for phrase, stats in phrase_stats.items():
+        app_count = len(stats.get("apps", set()))
+        if app_count < min_doc_freq:
+            continue
+        title_mentions = int(stats.get("title_mentions", 0))
+        short_mentions = int(stats.get("short_description_mentions", 0))
+        desc_mentions = int(stats.get("description_mentions", 0))
+        ngram_size = int(stats.get("ngram_size", 2))
+        weighted = (
+            (title_mentions * FIELD_WEIGHTS["title"])
+            + (short_mentions * FIELD_WEIGHTS["short_description"])
+            + (desc_mentions * FIELD_WEIGHTS["description"])
+        )
+        ranked.append((phrase, weighted, app_count, title_mentions, short_mentions, desc_mentions, ngram_size))
+
+    ranked.sort(key=lambda x: (x[1], x[2], x[0]), reverse=True)
+    rows: List[List[object]] = [[
+        "phrase",
+        "ngram_size",
+        "weighted_emphasis",
+        "document_frequency",
+        "coverage_ratio",
+        "title_mentions",
+        "short_description_mentions",
+        "description_mentions",
+        "dominant_field",
+    ]]
+    for phrase, weighted, app_count, title_mentions, short_mentions, desc_mentions, ngram_size in ranked[:top_n]:
+        dominant_field = max(
+            [("title", title_mentions), ("short_description", short_mentions), ("description", desc_mentions)],
+            key=lambda x: (x[1], x[0]),
+        )[0]
+        rows.append(
+            [
+                phrase,
+                ngram_size,
+                f"{weighted:.2f}",
+                app_count,
+                f"{(app_count / total_apps) if total_apps else 0.0:.3f}",
+                title_mentions,
+                short_mentions,
+                desc_mentions,
+                dominant_field,
+            ]
+        )
+    return rows
 
 
 def main() -> int:
@@ -336,6 +513,22 @@ def main() -> int:
     token_sets: List[Set[str]] = []
     names: List[str] = []
 
+    theme_app_counts: Counter[str] = Counter()
+    theme_terms: Dict[str, Counter[str]] = defaultdict(Counter)
+    theme_examples: Dict[str, List[str]] = defaultdict(list)
+    keyword_stats: Dict[str, Dict[str, object]] = defaultdict(
+        lambda: {"apps": 0, "title": 0, "short_description": 0, "description": 0}
+    )
+    phrase_stats: Dict[str, Dict[str, object]] = defaultdict(
+        lambda: {
+            "apps": set(),
+            "title_mentions": 0,
+            "short_description_mentions": 0,
+            "description_mentions": 0,
+            "ngram_size": 2,
+        }
+    )
+
     for row in rows:
         app_name = str(row.get(col_app_name, "")).strip()
         short_desc = str(row.get(col_short, "")).strip() if col_short else ""
@@ -357,7 +550,44 @@ def main() -> int:
         motifs = motif_presence(tokens)
 
         title_tokens = tokenize(app_name, args.min_token_len)
+        short_tokens = tokenize(short_desc, args.min_token_len)
+        desc_tokens = tokenize(full_desc, args.min_token_len)
+        metadata_token_set = set(title_tokens).union(short_tokens).union(desc_tokens)
         first_token = title_tokens[0] if title_tokens else ""
+
+        app_theme_hits = build_theme_hits(metadata_token_set)
+        app_dominant_theme = dominant_theme(app_theme_hits)
+        for theme, hit_count in app_theme_hits.items():
+            if hit_count <= 0:
+                continue
+            theme_app_counts[theme] += 1
+            theme_terms[theme].update([t for t in metadata_token_set if t in SEMANTIC_THEMES[theme]])
+            if app_name and len(theme_examples[theme]) < 5 and app_name not in theme_examples[theme]:
+                theme_examples[theme].append(app_name)
+
+        for token in metadata_token_set:
+            keyword_stats[token]["apps"] = int(keyword_stats[token]["apps"]) + 1
+        for token in set(title_tokens):
+            keyword_stats[token]["title"] = int(keyword_stats[token]["title"]) + 1
+        for token in set(short_tokens):
+            keyword_stats[token]["short_description"] = int(keyword_stats[token]["short_description"]) + 1
+        for token in set(desc_tokens):
+            keyword_stats[token]["description"] = int(keyword_stats[token]["description"]) + 1
+
+        app_key = pkg if pkg else app_name
+        for n in (2, 3):
+            for phrase in set(make_ngrams(title_tokens, n)):
+                phrase_stats[phrase]["ngram_size"] = n
+                phrase_stats[phrase]["title_mentions"] = int(phrase_stats[phrase]["title_mentions"]) + 1
+                phrase_stats[phrase]["apps"].add(app_key)
+            for phrase in set(make_ngrams(short_tokens, n)):
+                phrase_stats[phrase]["ngram_size"] = n
+                phrase_stats[phrase]["short_description_mentions"] = int(phrase_stats[phrase]["short_description_mentions"]) + 1
+                phrase_stats[phrase]["apps"].add(app_key)
+            for phrase in set(make_ngrams(desc_tokens, n)):
+                phrase_stats[phrase]["ngram_size"] = n
+                phrase_stats[phrase]["description_mentions"] = int(phrase_stats[phrase]["description_mentions"]) + 1
+                phrase_stats[phrase]["apps"].add(app_key)
 
         matrix_row: Dict[str, object] = {
             "app_name": app_name,
@@ -376,6 +606,10 @@ def main() -> int:
             "title_has_number": 1 if NUM_RE.search(app_name) else 0,
             "title_has_exclaim": 1 if EXCLAIM_RE.search(app_name) else 0,
             "title_starts_with_action_verb": 1 if first_token in ACTION_VERBS else 0,
+            "dominant_theme": app_dominant_theme,
+            "top_title_terms": ", ".join(top_terms_from_tokens(title_tokens, 4)),
+            "top_short_terms": ", ".join(top_terms_from_tokens(short_tokens, 5)),
+            "top_description_terms": ", ".join(top_terms_from_tokens(desc_tokens, 6)),
             "store_url": url,
         }
         matrix_row.update(motifs)
@@ -391,6 +625,9 @@ def main() -> int:
     min_doc_freq = max(2, int(math.ceil(len(token_sets) * args.common_threshold)))
     top_terms = top_document_terms(token_sets, args.top_terms, min_doc_freq)
     similarity_table = build_similarity(names, token_sets)
+    semantic_theme_csv = build_theme_summary(theme_app_counts, theme_terms, theme_examples, len(matrix_rows))
+    keyword_emphasis_csv = build_keyword_emphasis_rows(keyword_stats, len(matrix_rows), min_doc_freq, args.top_terms)
+    phrase_patterns_csv = build_phrase_pattern_rows(phrase_stats, len(matrix_rows), min_doc_freq, args.top_terms)
 
     matrix_headers = [
         "app_name",
@@ -409,6 +646,10 @@ def main() -> int:
         "title_has_number",
         "title_has_exclaim",
         "title_starts_with_action_verb",
+        "dominant_theme",
+        "top_title_terms",
+        "top_short_terms",
+        "top_description_terms",
     ] + list(MOTIFS.keys()) + ["store_url"]
 
     matrix_csv: List[List[object]] = [matrix_headers]
@@ -417,7 +658,9 @@ def main() -> int:
 
     common_patterns_csv = [["motif", "prevalence", "count", "total", "is_common"]]
     for motif, prevalence, count, total in motif_stats:
-        common_patterns_csv.append([motif, f"{prevalence:.3f}", count, total, 1 if prevalence >= args.common_threshold else 0])
+        common_patterns_csv.append(
+            [motif, f"{prevalence:.3f}", count, total, 1 if prevalence >= args.common_threshold else 0]
+        )
 
     term_cov_csv = [["term", "document_frequency", "coverage_ratio"]]
     for token, df, cov in top_terms:
@@ -427,12 +670,18 @@ def main() -> int:
     patterns_path = output_dir / f"{args.prefix}_common_patterns.csv"
     terms_path = output_dir / f"{args.prefix}_term_coverage.csv"
     similarity_path = output_dir / f"{args.prefix}_similarity.csv"
+    semantic_path = output_dir / f"{args.prefix}_semantic_themes.csv"
+    emphasis_path = output_dir / f"{args.prefix}_keyword_emphasis.csv"
+    phrases_path = output_dir / f"{args.prefix}_phrase_patterns.csv"
     report_path = output_dir / f"{args.prefix}_report.md"
 
     write_csv(matrix_path, matrix_csv)
     write_csv(patterns_path, common_patterns_csv)
     write_csv(terms_path, term_cov_csv)
     write_csv(similarity_path, similarity_table)
+    write_csv(semantic_path, semantic_theme_csv)
+    write_csv(emphasis_path, keyword_emphasis_csv)
+    write_csv(phrases_path, phrase_patterns_csv)
 
     title_lengths = [int(r["title_len"]) for r in matrix_rows]
     short_lengths = [int(r["short_description_len"]) for r in matrix_rows]
@@ -461,6 +710,29 @@ def main() -> int:
         report_lines.append(f"- `{motif}`: `{count}/{total}` ({prevalence:.1%}){marker}")
 
     report_lines.append("")
+    report_lines.append("## Semantic Theme Prevalence")
+    for row in semantic_theme_csv[1:8]:
+        theme = str(row[0])
+        app_count = int(row[1]) if str(row[1]).strip() else 0
+        if app_count <= 0:
+            continue
+        report_lines.append(f"- `{theme}`: `{app_count}` apps ({float(row[2]):.1%}), terms: `{row[3]}`")
+
+    report_lines.append("")
+    report_lines.append("## Keyword Emphasis (Title vs Short vs Description)")
+    for row in keyword_emphasis_csv[1:13]:
+        report_lines.append(
+            f"- `{row[0]}` score=`{row[1]}` coverage=`{row[3]}` dominant=`{row[7]}` title=`{row[4]}` short=`{row[5]}` desc=`{row[6]}`"
+        )
+
+    report_lines.append("")
+    report_lines.append("## Recurring Phrase Patterns")
+    for row in phrase_patterns_csv[1:11]:
+        report_lines.append(
+            f"- `{row[0]}` n=`{row[1]}` score=`{row[2]}` coverage=`{row[4]}` dominant=`{row[8]}`"
+        )
+
+    report_lines.append("")
     report_lines.append("## High-Coverage Vocabulary")
     for token, df, cov in top_terms[:20]:
         report_lines.append(f"- `{token}`: appears in `{df}` apps ({cov:.1%})")
@@ -470,16 +742,28 @@ def main() -> int:
     for item in implications:
         report_lines.append(f"- {item}")
 
+    report_lines.append("")
+    report_lines.append("## Output Files")
+    report_lines.append(f"- `{matrix_path}`")
+    report_lines.append(f"- `{patterns_path}`")
+    report_lines.append(f"- `{terms_path}`")
+    report_lines.append(f"- `{similarity_path}`")
+    report_lines.append(f"- `{semantic_path}`")
+    report_lines.append(f"- `{emphasis_path}`")
+    report_lines.append(f"- `{phrases_path}`")
+
     report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
 
     print(f"Wrote: {matrix_path}")
     print(f"Wrote: {patterns_path}")
     print(f"Wrote: {terms_path}")
     print(f"Wrote: {similarity_path}")
+    print(f"Wrote: {semantic_path}")
+    print(f"Wrote: {emphasis_path}")
+    print(f"Wrote: {phrases_path}")
     print(f"Wrote: {report_path}")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
