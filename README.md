@@ -150,6 +150,7 @@ Each run writes outputs under your chosen `--output-dir`, typically:
 - `psl_manifest.json`
 - `fastlane/metadata/...`
 - `pipeline_run_log.json`
+- `pipeline_human_summary.md` (human-readable run explanation)
 
 ## Notes
 

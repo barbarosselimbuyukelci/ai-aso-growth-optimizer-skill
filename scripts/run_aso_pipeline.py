@@ -13,6 +13,7 @@ Use --auto-approve for non-interactive CI usage.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import subprocess
 import sys
@@ -106,6 +107,115 @@ def write_json(path: Path, payload: Dict[str, Any]) -> None:
         f.write("\n")
 
 
+def read_csv_rows(path: Path) -> List[Dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def write_human_summary(path: Path, log: Dict[str, Any], output_dir: Path) -> None:
+    steps = log.get("steps", [])
+    status = str(log.get("status", "unknown"))
+    analysis_dir = output_dir / "analysis"
+
+    lines: List[str] = [
+        "# ASO Pipeline Human Summary",
+        "",
+        "## Run Snapshot",
+        f"- Status: `{status}`",
+        f"- Started: `{log.get('started_at_utc', '')}`",
+        f"- Finished: `{log.get('finished_at_utc', '')}`",
+        f"- App scope: `{log.get('app_scope', '')}`",
+        f"- Output dir: `{output_dir}`",
+        "",
+        "## What Was Analyzed",
+    ]
+
+    if not steps:
+        lines.append("- No step executed.")
+    else:
+        for s in steps:
+            lines.append(f"- `{s.get('step_id','')}` {s.get('title','')}: {s.get('summary','')}")
+
+    lines.extend(["", "## Step Results"])
+    for s in steps:
+        rc = s.get("return_code", "")
+        lines.append(f"- `{s.get('step_id','')}` `{s.get('status','')}` rc=`{rc}` {s.get('title','')}")
+
+    keyword_csv = analysis_dir / "keyword_volume_estimates.csv"
+    keyword_rows = read_csv_rows(keyword_csv)
+    if keyword_rows:
+        lines.extend(["", "## Key Findings", "Top keyword opportunities:"])
+        top = keyword_rows[:3]
+        for row in top:
+            lines.append(
+                f"- `{row.get('keyword','')}` demand=`{row.get('estimated_demand_score','')}` confidence=`{row.get('confidence_band','')}`"
+            )
+
+    ios_patterns = analysis_dir / "ios_competitor_common_patterns.csv"
+    ios_rows = read_csv_rows(ios_patterns)
+    if ios_rows:
+        common = [r for r in ios_rows if str(r.get("is_common", "0")).strip() == "1"][:5]
+        if common:
+            lines.append("Common iOS competitor motifs:")
+            for row in common:
+                lines.append(f"- `{row.get('motif','')}` prevalence=`{row.get('prevalence','')}`")
+
+    play_patterns = analysis_dir / "play_competitor_common_patterns.csv"
+    play_rows = read_csv_rows(play_patterns)
+    if play_rows:
+        common = [r for r in play_rows if str(r.get("is_common", "0")).strip() == "1"][:5]
+        if common:
+            lines.append("Common Android competitor motifs:")
+            for row in common:
+                lines.append(f"- `{row.get('motif','')}` prevalence=`{row.get('prevalence','')}`")
+
+    lines.extend(["", "## Generated Artifacts"])
+    key_files = [
+        output_dir / "metadata_bundle.json",
+        output_dir / "cpp_manifest.json",
+        output_dir / "psl_manifest.json",
+        output_dir / "cpp_psl_summary.json",
+        output_dir / "pipeline_run_log.json",
+    ]
+    for f in key_files:
+        if f.exists():
+            lines.append(f"- `{f}`")
+
+    errors: List[str] = []
+    for s in steps:
+        if str(s.get("status", "")) == "failed":
+            errors.append(f"{s.get('step_id','')}: command failed (rc={s.get('return_code','')})")
+        stderr = str(s.get("stderr", "")).strip()
+        if stderr:
+            errors.append(f"{s.get('step_id','')}: stderr present")
+    if errors:
+        lines.extend(["", "## Warnings / Errors"])
+        for e in errors:
+            lines.append(f"- {e}")
+
+    lines.extend(
+        [
+            "",
+            "## Next Actions",
+            "- Review metadata_bundle and manifests before publish.",
+            "- If localization warnings exist, revise copy and rerun.",
+            "- Run fastlane push in dry-run first, then execute.",
+        ]
+    )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def finalize_run(log: Dict[str, Any], *, status: str, log_path: Path, summary_path: Path, output_dir: Path) -> None:
+    log["finished_at_utc"] = utc_now()
+    log["status"] = status
+    write_json(log_path, log)
+    write_human_summary(summary_path, log, output_dir)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run ASO pipeline with mandatory approval gates")
     parser.add_argument("--keyword-input", help="Keyword CSV for demand estimation")
@@ -128,6 +238,7 @@ def main() -> int:
     parser.add_argument("--execute-push", action="store_true", help="Actually execute fastlane push commands")
     parser.add_argument("--auto-approve", action="store_true", help="Skip interactive approval prompts")
     parser.add_argument("--log-out", help="Optional path for pipeline run log JSON")
+    parser.add_argument("--human-summary-out", help="Optional path for human-readable Markdown summary")
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -135,6 +246,11 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     log_path = Path(args.log_out).resolve() if args.log_out else output_dir / "pipeline_run_log.json"
+    human_summary_path = (
+        Path(args.human_summary_out).resolve()
+        if args.human_summary_out
+        else output_dir / "pipeline_human_summary.md"
+    )
     log: Dict[str, Any] = {
         "started_at_utc": utc_now(),
         "app_scope": args.app_scope,
@@ -182,7 +298,7 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
     if args.ios_seeds:
@@ -209,7 +325,7 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
     if args.play_raw_export:
@@ -234,7 +350,7 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
         play_cmd = [
@@ -258,7 +374,7 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
     step_ok = gate_step(
@@ -279,7 +395,7 @@ def main() -> int:
         auto_approve=args.auto_approve,
     )
     if not step_ok:
-        write_json(log_path, log)
+        finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
         return 1
 
     step_ok = gate_step(
@@ -300,13 +416,13 @@ def main() -> int:
         auto_approve=args.auto_approve,
     )
     if not step_ok:
-        write_json(log_path, log)
+        finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
         return 1
 
     if args.push_ios:
         if not args.app_identifier:
             print("ERROR: --app-identifier is required when --push-ios is set")
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 2
         cmd = [
             sys.executable,
@@ -334,13 +450,13 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
     if args.push_android:
         if not args.package_name:
             print("ERROR: --package-name is required when --push-android is set")
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 2
         cmd = [
             sys.executable,
@@ -368,13 +484,12 @@ def main() -> int:
             auto_approve=args.auto_approve,
         )
         if not step_ok:
-            write_json(log_path, log)
+            finalize_run(log, status="failed", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
             return 1
 
-    log["finished_at_utc"] = utc_now()
-    log["status"] = "ok"
-    write_json(log_path, log)
+    finalize_run(log, status="ok", log_path=log_path, summary_path=human_summary_path, output_dir=output_dir)
     print(f"Pipeline completed. Log: {log_path}")
+    print(f"Human summary: {human_summary_path}")
     return 0
 
 
