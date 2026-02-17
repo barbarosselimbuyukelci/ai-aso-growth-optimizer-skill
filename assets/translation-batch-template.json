@@ -1,0 +1,22 @@
+﻿{
+  "source_locale": "en-US",
+  "target_locales": ["tr-TR", "de-DE", "fr-FR"],
+  "protected_terms": ["AI", "GPT", "MyBrand"],
+  "entries": [
+    {
+      "id": "title",
+      "field": "title",
+      "text": "AI Meeting Notes"
+    },
+    {
+      "id": "subtitle",
+      "field": "subtitle",
+      "text": "Record, summarize, and share instantly"
+    },
+    {
+      "id": "short_description",
+      "field": "short_description",
+      "text": "Turn calls into clean action items"
+    }
+  ]
+}

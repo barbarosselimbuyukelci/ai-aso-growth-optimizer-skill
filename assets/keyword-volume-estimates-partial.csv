@@ -1,0 +1,5 @@
+rank,keyword,locale,platform,estimated_demand_score,confidence_score,confidence_band,apple_score,google_score,apptweak_score,competitor_score,itunes_score,evidence_sources
+1,task manager,en-US,apple,92.0,13.0,low,,,,92.0,,competitor
+2,meeting notes,en-US,apple,78.7,13.0,low,,,,78.7,,competitor
+3,voice transcription,en-US,google,47.62,13.0,low,,,,47.62,,competitor
+4,ai notes,tr-TR,apple,18.5,13.0,low,,,,18.5,,competitor

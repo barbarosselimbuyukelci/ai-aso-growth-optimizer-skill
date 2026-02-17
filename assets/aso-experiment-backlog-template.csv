@@ -1,0 +1,5 @@
+﻿hypothesis,impact,confidence,ease,owner,platform,locale,metric,target_lift_percent,notes
+"Rewrite title for high-intent category term",8,7,8,"",apple,"en-US","listing_conversion",12,""
+"Replace screenshot 1 with value-first framing",9,6,7,"",google,"en-US","listing_conversion",15,""
+"Localized screenshot set for Turkey",7,6,6,"",google,"tr-TR","listing_conversion",10,""
+"Custom product page for competitor-switch query",8,5,5,"",apple,"en-US","retained_installer_rate",8,""

@@ -1,0 +1,39 @@
+{
+  "app_name": "NoteFlow",
+  "brand_name": "NoteFlow",
+  "app_scope": "dual",
+  "global_keywords": ["notes", "productivity", "ai notes"],
+  "locales": [
+    {
+      "locale": "en-US",
+      "intent_cluster": "meeting-notes",
+      "primary_keyword": "meeting notes",
+      "secondary_keywords": ["voice notes", "meeting summary", "transcription"],
+      "value_props": [
+        "Turn meetings into action items",
+        "Capture and summarize conversations quickly"
+      ],
+      "feature_points": [
+        "Record and transcribe calls",
+        "Extract tasks and owners",
+        "Share notes with teammates"
+      ]
+    },
+    {
+      "locale": "tr-TR",
+      "intent_cluster": "toplanti-notlari",
+      "primary_keyword": "toplanti notlari",
+      "secondary_keywords": ["sesli not", "toplanti ozeti"],
+      "value_props": [
+        "Toplantilari aksiyon maddelerine donustur",
+        "Konusmalari hizli ozetle"
+      ],
+      "feature_points": [
+        "Toplantiyi kaydet ve metne cevir",
+        "Gorev ve sorumlulari cikar",
+        "Notlari ekiple paylas"
+      ]
+    }
+  ]
+}
+

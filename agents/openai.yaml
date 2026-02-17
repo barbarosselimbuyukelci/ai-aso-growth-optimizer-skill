@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "ASO Growth Optimizer"
+  short_description: "Global ASO with policy-safe automation"
+  default_prompt: "Use $aso-growth-optimizer to design a multilingual, policy-safe ASO system with intent mining, semantic localization QA, and fastlane-ready execution steps."

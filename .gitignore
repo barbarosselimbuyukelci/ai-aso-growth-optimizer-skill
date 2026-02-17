@@ -1,0 +1,9 @@
+﻿__pycache__/
+*.pyc
+run-artifacts/
+.DS_Store
+assets/*sample*.csv
+assets/*sample*.json
+assets/*sample*.md
+assets/scope_*_test*
+assets/play_*_test*

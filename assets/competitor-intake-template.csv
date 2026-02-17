@@ -1,0 +1,2 @@
+﻿app_name,platform,locale,category,title_pattern,primary_value_claim,secondary_value_claim,cta_style,ai_positioning,speed_positioning,trust_positioning,collaboration_positioning,pricing_cue,social_proof_cue,screenshot_1_hook,screenshot_flow_pattern,video_hook,localization_quality,rating_snapshot,notes
+Example App,iOS,en-US,Productivity,"Verb + Outcome","Summarize meetings","Share notes fast","Action-first",1,1,0,1,"Free trial","Millions users","Pain -> fix","Capture -> organize -> share","5-second promise","Native and persuasive",4.7/120k,"Manual review row"

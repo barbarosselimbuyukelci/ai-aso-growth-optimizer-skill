@@ -1,0 +1,15 @@
+{
+  "app_name": "Title",
+  "package_name": "Package ID",
+  "developer": "Publisher",
+  "category": "Genre",
+  "locale": "Language",
+  "country": "Store Country",
+  "short_description": "Tagline",
+  "full_description": "Description",
+  "avg_rating": "Average Rating",
+  "rating_count": "Ratings Count",
+  "installs": "Downloads",
+  "price": "List Price",
+  "url": "Play URL"
+}
